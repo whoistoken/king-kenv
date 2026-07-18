@@ -309,7 +309,8 @@
         }
         @keyframes fadeIn {
             from { opacity: 0; transform: translateX(-10px); }
-            to/* TYPING */
+            to { opacity: 1; transform: translateX(0); }
+        }/* TYPING */
         .typing-indicator {
             align-self: flex-start;
             background: #0c0a16;
@@ -441,8 +442,7 @@
                 <button id="saveKeyBtn">Simpan</button>
                 <span class="status-dot" id="statusDot"></span>
             </div>
-        </div> { opacity: 1; transform: translateX(0); }
-        }<!-- QUICK ACTIONS -->
+        </div><!-- QUICK ACTIONS -->
         <div class="quick-actions">
             <button class="quick-btn" data-prompt="Jelasin konsep rumit jadi simpel, yang straight to the point.">⚡ TANYA</button>
             <button class="quick-btn" data-prompt="Bantuin nulis / rapihin teks, gaya lu yang keren.">🛠️ TULIS</button>
