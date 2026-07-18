@@ -40,7 +40,6 @@
             overflow: hidden;
         }
 
-        /* Efek Grid */
         .app-wrapper::after {
             content: '';
             position: absolute;
@@ -53,9 +52,7 @@
             background-size: 40px 40px;
             pointer-events: none;
             z-index: 0;
-        }
-
-        /* === KARAKTER CYBER HEAD (SANGAR) === */
+        }/* === CYBER HEAD === */
         .cyber-container {
             position: absolute;
             bottom: 110px;
@@ -103,7 +100,6 @@
             }
         }
 
-        /* Visor (mata cyborg) */
         .visor {
             position: absolute;
             top: 35%;
@@ -166,7 +162,6 @@
             box-shadow: 0 0 10px #ff0055;
         }
 
-        /* Loading state (glitch lebih kenceng) */
         .cyber-container.loading .cyber-head {
             animation: glitchShake 0.2s infinite alternate, borderPulse 0.5s linear infinite;
         }
@@ -177,9 +172,7 @@
             100% {
                 transform: translate(2px, -1px) rotate(2deg);
             }
-        }
-
-        /* === HEADER === */
+        }/* === HEADER === */
         .header {
             display: flex;
             justify-content: space-between;
@@ -245,9 +238,7 @@
             font-size: 12px;
             font-weight: 600;
             letter-spacing: 1px;
-        }
-
-        /* === QUICK BUTTONS === */
+        }/* === QUICK BUTTONS === */
         .quick-actions {
             display: flex;
             gap: 10px;
@@ -449,9 +440,7 @@
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
-        }
-
-        /* === FOOTER === */
+        }/* === FOOTER === */
         .footer-bar {
             display: flex;
             justify-content: space-between;
@@ -500,7 +489,7 @@
 <body>
 
     <div class="app-wrapper">
-        <!-- KARAKTER CYBER HEAD (SANGAR) -->
+        <!-- CYBER HEAD -->
         <div class="cyber-container" id="cyberContainer">
             <div class="cyber-head">
                 <div class="visor"></div>
@@ -528,7 +517,7 @@
             <button class="quick-btn" data-prompt="Brainstorming ide baru, yang out of the box.">🧠 IDE</button>
         </div>
 
-        <!-- CHAT AREA -->
+        <!-- CHAT -->
         <div class="chat-area" id="chatArea">
             <div class="message assistant">
                 <span class="label">// KEN</span>
@@ -551,7 +540,7 @@
 
         <!-- FOOTER -->
         <div class="footer-bar">
-            <span class="hint">$ KEN // <i>v3.0</i> // OPEN_SOURCE</span>
+            <span class="hint">$ KEN // <i>v3.1</i> // OPEN_SOURCE</span>
             <span class="hint"># NO_KEY # FREE</span>
         </div>
     </div>
@@ -567,41 +556,44 @@
             const cyberContainer = document.getElementById('cyberContainer');
             const quickBtns = document.querySelectorAll('.quick-btn');
 
-            // --- CONFIG GRATIS PAKAI PROXY PUBLIK (Gak perlu API Key) ---
-            const API_URL = 'https://keylessai.thryx.workers.dev/v1/chat/completions';
+            // Konfigurasi API GRATIS (pakai proxy Rose)
+            const API_URL = 'https://api.itsrose.rest/ai/chat';
 
             async function sendMessage() {
                 const message = userInput.value.trim();
-                if (!message) return;
+                if (!message) {
+                    // Kasih feedback kalo kosong
+                    userInput.style.borderColor = '#ff0055';
+                    setTimeout(() => userInput.style.borderColor = '', 1000);
+                    return;
+                }
 
-                // Disable UI
-                sendBtn.disabled = true;
-                userInput.disabled = true;
-                cyberContainer.classList.add('loading');
-                typingIndicator.style.display = 'block';
-
+                // 1. TAMPILIN PESAN USER (langsung, sebelum fetch)
                 addMessage('user', message);
                 userInput.value = '';
+                userInput.disabled = true;
+                sendBtn.disabled = true;
+                cyberContainer.classList.add('loading');
+                typingIndicator.style.display = 'block';
                 scrollToBottom();
 
                 try {
-                    const payload = {
-                        model: 'gpt-4o-mini', // atau llama3, terserah proxy
-                        messages: [
-                            { role: 'system', content: 'Kamu adalah KEN, asisten AI yang tegas, cool, dan langsung ke poin. Gaya bicaramu santai, pake "Gue" dan "Lu" sesekali, jawab dengan percaya diri. Jangan pake emoticon lebay, cukup tegas dan keren. Jawab dalam Bahasa Indonesia.' },
-                            { role: 'user', content: message }
-                        ],
-                        temperature: 0.8,
-                        max_tokens: 1024,
-                    };
-
+                    // 2. Panggil API
                     const response = await fetch(API_URL, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': 'Bearer dummy-free-key' // Gak dipakai, tapi wajib ada
+                            // Gak perlu API key, proxy ini gratis
                         },
-                        body: JSON.stringify(payload)
+                        body: JSON.stringify({
+                            messages: [
+                                { role: 'system', content: 'Kamu adalah KEN, asisten AI yang tegas, cool, dan langsung ke poin. Gaya bicaramu santai, pake "Gue" dan "Lu" sesekali, jawab dengan percaya diri. Jangan pake emoticon lebay, cukup tegas dan keren. Jawab dalam Bahasa Indonesia.' },
+                                { role: 'user', content: message }
+                            ],
+                            model: 'gpt-4o-mini',
+                            temperature: 0.8,
+                            max_tokens: 1024
+                        })
                     });
 
                     typingIndicator.style.display = 'none';
@@ -612,27 +604,35 @@
                         try {
                             const errData = await response.json();
                             if (errData.error) errMsg = `⚠️ ${errData.error.message || errData.error}`;
-                        } catch (_) {}
+                        } catch (_) { }
                         addMessage('error', `❌ ${errMsg}. Coba refresh atau kirim ulang.`);
-                        sendBtn.disabled = false;
                         userInput.disabled = false;
+                        sendBtn.disabled = false;
                         return;
                     }
 
                     const data = await response.json();
-                    if (data.choices && data.choices.length > 0) addMessage('assistant', data.choices[0].message.content);
+                    // Response dari Rose: { status, result: { response } } atau langsung { choices }
+                    let reply = '';
+                    if (data.result && data.result.response) {
+                        reply = data.result.response;
+                    } else if (data.choices && data.choices.length > 0) {
+                        reply = data.choices[0].message.content;
+                    } else if (data.response) {
+                        reply = data.response;
                     } else {
-                        addMessage('error', '⚠️ Gak ada respons dari server. Coba lagi.');
+                        reply = '⚠️ Gak ada respons dari server. Coba lagi.';
                     }
+                    addMessage('assistant', reply);
 
                 } catch (error) {
                     typingIndicator.style.display = 'none';
                     cyberContainer.classList.remove('loading');
-                    addMessage('error', `❌ Jaringan error: ${error.message || 'Cek koneksi internet.'}`);
+                    addMessage('error', `❌ Gagal konek: ${error.message || 'Cek internet.'}`);
                 }
 
-                sendBtn.disabled = false;
                 userInput.disabled = false;
+                sendBtn.disabled = false;
                 userInput.focus();
                 scrollToBottom();
             }
@@ -675,7 +675,7 @@
                 });
             });
 
-            console.log('🔥 KEN CYBER siap!');
+            console.log('🔥 KEN CYBER v3.1 siap!');
         })();
     </script>
 </body>
