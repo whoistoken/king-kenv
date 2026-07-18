@@ -22,13 +22,12 @@
     --muted:#9B9AA8;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-  html,body{height:100%;}
+  html,body{height:auto;min-height:100%;}
   body{
     margin:0;
     background:var(--bg);
     color:var(--text);
     font-family:'Inter',sans-serif;
-    overflow:hidden;
   }
   ::selection{background:rgba(232,196,104,.3);}
   ::-webkit-scrollbar{width:6px;}
@@ -61,15 +60,19 @@
 
   a{color:var(--gold);}
 
-  .app{ position:relative; z-index:1; height:100vh; display:flex; flex-direction:column; }
+  .app{ position:relative; z-index:1; min-height:100dvh; min-height:100vh; display:flex; flex-direction:column; }
 
   /* ---------- TOP BAR ---------- */
   .topbar{
+    position:sticky;
+    top:0;
+    z-index:20;
     flex:none;
     display:flex;
     align-items:center;
     justify-content:space-between;
     padding:18px 20px 8px 20px;
+    background:linear-gradient(to bottom, var(--bg) 60%, transparent);
   }
   .icon-btn{
     width:44px;height:44px;border-radius:50%;
@@ -102,11 +105,10 @@
   /* ---------- HERO ---------- */
   .hero{
     flex:1;
-    overflow-y:auto;
     display:flex;
     flex-direction:column;
     align-items:center;
-    padding:3vh 24px 10px 24px;
+    padding:3vh 24px 130px 24px;
   }
   .orb-stage{
     position:relative;
@@ -210,7 +212,7 @@
   }
 
   /* ---------- THREAD ---------- */
-  .thread-scroll{ flex:1; overflow-y:auto; display:none; padding:14px 0 14px 0; }
+  .thread-scroll{ flex:1; display:none; padding:14px 0 130px 0; }
   .thread-scroll.show{display:block;}
   .hero.hide{display:none;}
   .thread{ max-width:640px; margin:0 auto; padding:0 20px; display:flex; flex-direction:column; gap:20px; }
@@ -257,7 +259,13 @@
   @keyframes blink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}
 
   /* ---------- BOTTOM ---------- */
-  .bottom-area{ flex:none; padding:10px 20px calc(18px + env(safe-area-inset-bottom)) 20px; }
+  .bottom-area{
+    position:fixed;
+    left:0;right:0;bottom:0;
+    z-index:30;
+    padding:10px 20px calc(18px + env(safe-area-inset-bottom)) 20px;
+    background:linear-gradient(to top, var(--bg) 55%, transparent);
+  }
   .mode-row{ max-width:640px;margin:0 auto 10px auto; display:flex; gap:8px; }
   .mode-chip{
     display:flex;align-items:center;gap:6px;
@@ -447,7 +455,263 @@
 <div class="overlay" id="overlay">
   <div class="modal">
     <h3>Pengaturan</h3>
-    <div class="sub">API key disimpan lokal di browser kamu (localStorage), tidak pernah dikirim ke server lain selain OpenAI.</div>
+        <div class="sub">API key disimpan lokal di browser kamu (localStorage), tidak pernah dikirim ke server lain selain OpenAI.</div>
     <div class="field">
       <label>OpenAI API Key</label>
-      <input type="password" id="apiKeyInput"
+      <input type="password" id="apiKeyInput" placeholder="sk-...">
+      <div class="hint">Dapetin di platform.openai.com/api-keys</div>
+    </div>
+    <div class="field">
+      <label>Model</label>
+      <select id="modelInput">
+        <option value="gpt-4o-mini">gpt-4o-mini (cepat & murah)</option>
+        <option value="gpt-4o">gpt-4o</option>
+        <option value="gpt-4-turbo">gpt-4-turbo</option>
+        <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Kepribadian / system prompt</label>
+      <textarea id="personaInput"></textarea>
+      <div class="hint">Ini yang bikin KEN sopan, jujur, dan bertanggung jawab.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeSettings()">Batal</button>
+      <button class="btn primary" onclick="saveSettings()">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const DEFAULT_PERSONA = `Kamu adalah KEN, asisten AI pribadi. Prinsip kamu:
+- Jujur dan akurat; kalau tidak tahu atau ragu, bilang terus terang, jangan mengarang.
+- Sopan, hangat, tapi tetap ringkas dan langsung ke inti.
+- Bertanggung jawab: tolak dengan baik permintaan yang berbahaya atau melanggar hukum, tanpa menggurui.
+- Netral pada isu kontroversial/politik: sajikan berbagai sudut pandang secara adil, jangan memaksakan opini.
+- Kalau user minta kode, beri kode yang benar-benar bisa jalan, dengan penjelasan singkat.
+- Sesuaikan gaya bahasa dengan user (santai kalau santai, formal kalau formal).`;
+
+let state = {
+  chats: JSON.parse(localStorage.getItem('ken_chats') || '[]'),
+  activeId: null,
+  apiKey: (localStorage.getItem('ken_apikey') || '').replace(/[^\x21-\x7E]/g, '').trim(),
+  model: localStorage.getItem('ken_model') || 'gpt-4o-mini',
+  persona: localStorage.getItem('ken_persona') || DEFAULT_PERSONA,
+  deepThink: false,
+};
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function saveChats(){ localStorage.setItem('ken_chats', JSON.stringify(state.chats)); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function getActive(){ return state.chats.find(c => c.id === state.activeId); }
+
+function setGreeting(){
+  const h = new Date().getHours();
+  const g = document.getElementById('greeting');
+  if(h < 4) g.textContent = 'Masih terjaga, saya KEN';
+  else if(h < 11) g.textContent = 'Selamat pagi, saya KEN';
+  else if(h < 15) g.textContent = 'Selamat siang, saya KEN';
+  else if(h < 18) g.textContent = 'Selamat sore, saya KEN';
+  else g.textContent = 'Selamat malam, saya KEN';
+}
+
+function newChat(){
+  const chat = { id: uid(), title: 'Obrolan baru', messages: [] };
+  state.chats.unshift(chat);
+  state.activeId = chat.id;
+  saveChats();
+  renderHistory();
+  renderView();
+  closeDrawer();
+}
+
+function openDrawer(){ document.getElementById('drawer').classList.add('open'); document.getElementById('drawerOverlay').classList.add('show'); }
+function closeDrawer(){ document.getElementById('drawer').classList.remove('open'); document.getElementById('drawerOverlay').classList.remove('show'); }
+
+function renderHistory(){
+  const el = document.getElementById('history');
+  el.innerHTML = '';
+  if(state.chats.length === 0){
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:10px 6px;">Belum ada obrolan.</div>';
+    return;
+  }
+  state.chats.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'history-item' + (c.id === state.activeId ? ' active' : '');
+    div.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(c.title)}</span><span class="del" onclick="delChat(event,'${c.id}')">✕</span>`;
+    div.onclick = () => { state.activeId = c.id; renderHistory(); renderView(); closeDrawer(); };
+    el.appendChild(div);
+  });
+}
+
+function delChat(e, id){
+  e.stopPropagation();
+  state.chats = state.chats.filter(c => c.id !== id);
+  if(state.activeId === id){ state.activeId = state.chats[0]?.id || null; }
+  saveChats();
+  renderHistory();
+  renderView();
+}
+
+function renderMarkdown(text){
+  let codeBlocks = [];
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    codeBlocks.push({lang: lang || 'text', code});
+    return `%%CODEBLOCK${codeBlocks.length - 1}%%`;
+  });
+  let html = escapeHtml(text);
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  html = html.split(/\n{2,}/).map(block => {
+    if(/^%%CODEBLOCK\d+%%$/.test(block.trim())) return block.trim();
+    if(/^(-|\d+\.)\s/.test(block.trim())){
+      const items = block.trim().split('\n').map(l => `<li>${l.replace(/^(-|\d+\.)\s/, '')}</li>`).join('');
+      const tag = /^\d+\./.test(block.trim()) ? 'ol' : 'ul';
+      return `<${tag}>${items}</${tag}>`;
+    }
+    return `<p>${block.replace(/\n/g,'<br>')}</p>`;
+  }).join('');
+  html = html.replace(/%%CODEBLOCK(\d+)%%/g, (m, i) => {
+    const cb = codeBlocks[i];
+    const escCode = escapeHtml(cb.code.trim());
+    const id = 'code-' + uid();
+    return `<div class="codewrap"><div class="codehead"><span>${cb.lang}</span><button onclick="copyCode('${id}')">Copy</button></div><pre id="${id}">${escCode}</pre></div>`;
+  });
+  return html;
+}
+
+function copyCode(id){ navigator.clipboard.writeText(document.getElementById(id).textContent); }
+
+function renderMessage(m){
+  const div = document.createElement('div');
+  div.className = 'msg ' + m.role;
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = m.role === 'user' ? 'You' : 'K';
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  let bodyHtml = '';
+  if(m.think){
+    bodyHtml += `<details class="think"><summary>💭 Proses berpikir</summary><div class="think-body">${escapeHtml(m.think)}</div></details>`;
+  }
+  bodyHtml += renderMarkdown(m.content || '');
+  bubble.innerHTML = bodyHtml;
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  return div;
+}
+
+function renderView(){
+  const chat = getActive();
+  const hero = document.getElementById('hero');
+  const threadScroll = document.getElementById('threadScroll');
+  const thread = document.getElementById('thread');
+  thread.innerHTML = '';
+  if(!chat || chat.messages.length === 0){
+    hero.classList.remove('hide');
+    threadScroll.classList.remove('show');
+    return;
+  }
+  hero.classList.add('hide');
+  threadScroll.classList.add('show');
+  chat.messages.forEach(m => thread.appendChild(renderMessage(m)));
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'auto' });
+}
+
+function autoGrow(el){ el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; }
+function handleKey(e){ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } }
+function quickAsk(btn){ document.getElementById('input').value = btn.querySelector('span:last-child').textContent; send(); }
+function toggleDeep(){ state.deepThink = !state.deepThink; document.getElementById('deepToggle').classList.toggle('on', state.deepThink); }
+
+function sanitizeKey(raw){
+  return raw.replace(/[^\x21-\x7E]/g, '').trim();
+}
+
+async function send(){
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if(!text) return;
+  if(!state.apiKey || !/^[\x21-\x7E]+$/.test(state.apiKey)){ openSettings(); return; }
+
+  let chat = getActive();
+  if(!chat){
+    chat = { id: uid(), title: text.slice(0,32), messages: [] };
+    state.chats.unshift(chat);
+    state.activeId = chat.id;
+  }
+  if(chat.messages.length === 0){ chat.title = text.slice(0, 32) + (text.length > 32 ? '…' : ''); }
+
+  chat.messages.push({ role: 'user', content: text });
+  input.value = ''; autoGrow(input);
+  saveChats(); renderHistory(); renderView();
+
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = true;
+
+  const thread = document.getElementById('thread');
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg assistant';
+  typingDiv.innerHTML = `<div class="avatar">K</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  thread.appendChild(typingDiv);
+  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+  try{
+    let systemPrompt = state.persona;
+    if(state.deepThink){
+      systemPrompt += `\n\nUntuk pertanyaan ini, mulai jawabanmu dengan blok "<think>...</think>" berisi proses berpikirmu step-by-step secara singkat, baru setelah itu tulis jawaban final di luar tag think.`;
+    }
+    const messages = [{ role: 'system', content: systemPrompt }, ...chat.messages.map(m => ({ role: m.role, content: m.content }))];
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.apiKey}` },
+      body: JSON.stringify({ model: state.model, messages, temperature: 0.7 })
+    });
+    const data = await res.json();
+    typingDiv.remove();
+    if(data.error){
+      chat.messages.push({ role: 'assistant', content: `⚠️ Error dari OpenAI: ${data.error.message}` });
+    } else {
+      let raw = data.choices[0].message.content;
+      let think = null;
+      const thinkMatch = raw.match(/<think>([\s\S]*?)<\/think>/i);
+      if(thinkMatch){ think = thinkMatch[1].trim(); raw = raw.replace(thinkMatch[0], '').trim(); }
+      chat.messages.push({ role: 'assistant', content: raw, think });
+    }
+  } catch(err){
+    typingDiv.remove();
+    chat.messages.push({ role: 'assistant', content: `⚠️ Gagal menghubungi API: ${err.message}` });
+  }
+
+  saveChats(); renderHistory(); renderView();
+  sendBtn.disabled = false;
+}
+
+function openSettings(){
+  document.getElementById('apiKeyInput').value = state.apiKey;
+  document.getElementById('modelInput').value = state.model;
+  document.getElementById('personaInput').value = state.persona;
+  document.getElementById('overlay').classList.add('show');
+}
+function closeSettings(){ document.getElementById('overlay').classList.remove('show'); }
+function saveSettings(){
+  state.apiKey = sanitizeKey(document.getElementById('apiKeyInput').value);
+  state.model = document.getElementById('modelInput').value;
+  state.persona = document.getElementById('personaInput').value.trim() || DEFAULT_PERSONA;
+  localStorage.setItem('ken_apikey', state.apiKey);
+  localStorage.setItem('ken_model', state.model);
+  localStorage.setItem('ken_persona', state.persona);
+  document.getElementById('modelChip').textContent = state.model;
+  closeSettings();
+}
+
+setGreeting();
+document.getElementById('modelChip').textContent = state.model;
+if(state.chats.length){ state.activeId = state.chats[0].id; }
+renderHistory();
+renderView();
+if(!state.apiKey){ setTimeout(openSettings, 500); }
+</script>
+</body>
+</html>
